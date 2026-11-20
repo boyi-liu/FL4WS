@@ -11,6 +11,7 @@ from dataset import (
     supported_strategies,
     write_partition,
 )
+from models import build_model
 
 __all__ = [
     "ClientPartition",
@@ -18,6 +19,7 @@ __all__ = [
     "PartitionResult",
     "SampleMetadata",
     "SensingDataset",
+    "build_model",
     "load_dataset",
     "partition_dataset",
     "supported_strategies",

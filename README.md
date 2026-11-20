@@ -1,6 +1,6 @@
 # FL4WS · Federated Wireless Sensing Benchmark
 
-FL4WS prepares Wi-Fi sensing datasets for federated learning. It provides a common Python interface for loading samples and a command-line interface for generating reproducible client partitions, training and test arrays, and distribution statistics.
+FL4WS prepares Wi-Fi sensing datasets for federated learning. It provides a common Python interface for loading samples, PyTorch classification baselines, and a command-line interface for generating reproducible client partitions, training and test arrays, and distribution statistics.
 
 ## Datasets
 
@@ -70,6 +70,33 @@ Every entry point reads `dataset/config.yaml` by default. Use `--config` to sele
 - **IID** shuffles samples within each class and distributes them evenly across clients. **Dirichlet** samples per-class client proportions using `--alpha`. Both strategies require `--num-clients` and use a balanced assignment for the test pool.
 - **Cross-Subject** assigns one client per subject. **Cross-Environment** assigns one client per scene. Each client receives the training and test samples from its own group.
 - UT-HAR preserves the published training pool and combines its validation and test splits for evaluation. NTU-Fi HAR, ARIL, and Widar 3.0 preserve the released training and test pools. WiAR and MM-Fi hold out whole recordings within each subject using the configured seed and `--train-ratio`.
+
+## Classification models
+
+Install the optional PyTorch dependency with `python -m pip install -e '.[models]'`. Dataset loading, partitioning, and export do not require PyTorch.
+
+| Dataset IDs | Default baseline | Implementation |
+| --- | --- | --- |
+| `ut-har`, `ntu-fi-har`, `wiar` | 2D CNN over each CSI window | `models/cnn2d.py` |
+| `aril` | 1D temporal CNN with subcarriers as input channels | `models/cnn1d.py` |
+| `widar3`, `mm-fi` | Shared 2D frame encoder followed by a GRU | `models/cnn2d_gru.py` |
+
+`build_model` accepts the same dataset ID as `load_dataset`. It takes a `float32` tensor with shape `(batch, *sample_shape)` in the adapter's original axis order and returns raw logits of shape `(batch, num_classes)`. Use these logits directly with cross-entropy and zero-based integer labels.
+
+```python
+from torch.nn.functional import cross_entropy
+from torch.utils.data import DataLoader
+
+from fl4ws import build_model, load_dataset
+
+dataset = load_dataset("aril", "data/ARIL", normalization="zscore")
+model = build_model(dataset.name, num_classes=len(dataset.classes))
+x, y = next(iter(DataLoader(dataset, batch_size=8)))
+loss = cross_entropy(model(x), y)
+loss.backward()
+```
+
+This example demonstrates a forward and backward pass; for federated training, use each client's exported `train` and `test` arrays separately. The default class count is for the full release. For a subset, pass `len(dataset.classes)` or the length of `partition.json`'s `classes` list so all clients use the same output dimension, even when individual clients lack some classes.
 
 ## Outputs
 
