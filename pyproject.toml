@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fl4ws"
+version = "0.1.0"
+description = "Federated data partitions for WiFi CSI sensing benchmarks"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.23", "scipy>=1.9", "PyYAML>=6.0"]
+
+[project.scripts]
+fl4ws = "fl4ws.__main__:main"
+
+[tool.setuptools]
+packages = ["dataset", "fl4ws"]
+
+[tool.setuptools.package-data]
+dataset = ["config.yaml"]

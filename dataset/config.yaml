@@ -1,0 +1,12 @@
+# Set these here or pass them on the command line.
+# dataset: mm-fi
+# root: data/MMFi_Dataset
+# output: outputs/mmfi-environment
+# strategy: cross-environment
+# num_clients: 10  # Required for iid and dirichlet.
+
+seed: 42
+alpha: 0.5
+train_ratio: 0.8
+min_train_samples: 1
+normalization: none
