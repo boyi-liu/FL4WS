@@ -1,4 +1,4 @@
-"""Federated Wireless Sensing Benchmark."""
+"""Shared utilities for the FL4WS benchmark."""
 
 from dataset import (
     ClientPartition,

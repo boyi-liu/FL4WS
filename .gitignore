@@ -5,6 +5,7 @@ build/
 dist/
 data/
 outputs/
-tests/
+/tests/*
+!/tests/test_fedavg.py
 .DS_Store
 **/.DS_Store

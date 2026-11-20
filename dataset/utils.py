@@ -365,6 +365,11 @@ def _generator_options(args):
 def run_generator(load_dataset, argv=None, *, datasets=(), dataset_name=None):
     """Run a dataset script or the CLI for all registered datasets."""
     parser = argparse.ArgumentParser(description="Prepare federated WiFi CSI data partitions.")
+    add_generator_arguments(parser, datasets=datasets)
+    run_partition_command(load_dataset, parser, parser.parse_args(argv), dataset_name=dataset_name)
+
+
+def add_generator_arguments(parser, *, datasets=()):
     parser.add_argument(
         "--config",
         type=Path,
@@ -382,11 +387,13 @@ def run_generator(load_dataset, argv=None, *, datasets=(), dataset_name=None):
     parser.add_argument("--min-train-samples", type=int)
     parser.add_argument("--train-ratio", type=float, help="Recording holdout for datasets without a source split")
     parser.add_argument("--normalization", choices=("none", "zscore"))
-    args = parser.parse_args(argv)
 
+
+def run_partition_command(load_dataset, parser, args, *, dataset_name=None):
     try:
         options = _generator_options(args)
-        required = ("dataset", "root", "output", "strategy") if datasets else ("root", "output", "strategy")
+        unified = hasattr(args, "dataset")
+        required = ("dataset", "root", "output", "strategy") if unified else ("root", "output", "strategy")
         missing = [key for key in required if options.get(key) is None]
         if missing:
             raise ValueError(f"Set {', '.join(missing)} in the config file or on the command line")
@@ -398,7 +405,7 @@ def run_generator(load_dataset, argv=None, *, datasets=(), dataset_name=None):
         output = options.pop("output")
         normalization = options.pop("normalization", "none")
         config = PartitionConfig(**options)
-        loader_args = (name, root) if datasets else (root,)
+        loader_args = (name, root) if unified else (root,)
         dataset = load_dataset(*loader_args, normalization=normalization)
         result = partition_dataset(dataset, config)
         output = write_partition(result, output)

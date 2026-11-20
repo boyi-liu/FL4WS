@@ -1,6 +1,6 @@
 # FL4WS · Federated Wireless Sensing Benchmark
 
-FL4WS prepares Wi-Fi sensing datasets for federated learning. It provides a common Python interface for loading samples, PyTorch classification baselines, and a command-line interface for generating reproducible client partitions, training and test arrays, and distribution statistics.
+FL4WS prepares Wi-Fi sensing datasets for federated learning. It provides a common Python interface for loading samples, PyTorch classification baselines, a command-line interface for generating reproducible client partitions, and synchronous FedAvg training over TCP.
 
 ## Datasets
 
@@ -54,16 +54,16 @@ Install with Python 3.9 or later, then run one of the dataset generators.
 ```bash
 python -m pip install -e .
 
-fl4ws --dataset wiar --root data/WiAR \
+fl4ws partition --dataset wiar --root data/WiAR \
   --strategy cross-subject --seed 42 --output outputs/wiar-subject
 
-fl4ws --dataset aril --root data/ARIL \
+fl4ws partition --dataset aril --root data/ARIL \
   --strategy dirichlet --num-clients 10 --alpha 0.3 --output outputs/aril-dirichlet
 ```
 
-The same commands work with `python -m fl4ws`. Each dataset also has a standalone `dataset/generate_*.py` entry point that takes the same options with the dataset already selected. Common loading, partitioning, and export code lives in `dataset/utils.py`.
+`main.py` is the unified entry point. From the repository root, use `python main.py partition ...` or the installed `fl4ws partition ...` command. The legacy `fl4ws --dataset ...` form also works. Each dataset has a standalone `dataset/generate_*.py` entry point that takes the same options with the dataset already selected. Common loading, partitioning, and export code lives in `dataset/utils.py`.
 
-Every entry point reads `dataset/config.yaml` by default. Use `--config` to select another YAML file. Command-line values override YAML values, and relative paths are resolved from the working directory.
+Every partition entry point reads `dataset/config.yaml` by default. Use `--config` to select another YAML file. Command-line values override YAML values, and relative paths are resolved from the working directory.
 
 ### Partitioning and evaluation
 
@@ -87,7 +87,8 @@ Install the optional PyTorch dependency with `python -m pip install -e '.[models
 from torch.nn.functional import cross_entropy
 from torch.utils.data import DataLoader
 
-from fl4ws import build_model, load_dataset
+from dataset import load_dataset
+from models import build_model
 
 dataset = load_dataset("aril", "data/ARIL", normalization="zscore")
 model = build_model(dataset.name, num_classes=len(dataset.classes))
@@ -97,6 +98,30 @@ loss.backward()
 ```
 
 This example demonstrates a forward and backward pass; for federated training, use each client's exported `train` and `test` arrays separately. The default class count is for the full release. For a subset, pass `len(dataset.classes)` or the length of `partition.json`'s `classes` list so all clients use the same output dimension, even when individual clients lack some classes.
+
+## Federated training
+
+Install with `python -m pip install -e '.[models]'` and generate the WiAR cross-subject partition from the quick start. Edit the shared `config.yaml` to set the partition, network address, checkpoint path, round count, sampling fraction, local epochs, batch size, learning rate, seed, and timeout. Relative `partition` and `output` paths are resolved from the training YAML's directory.
+
+Start the server in one terminal:
+
+```bash
+OMP_NUM_THREADS=1 python main.py train --config config.yaml --role server
+```
+
+In another terminal, start a separate process for each client ID in `partition.json`, using the same training config. For the three WiAR clients in this example:
+
+```bash
+for id in 0 1 2; do
+  OMP_NUM_THREADS=1 python main.py train --config config.yaml --role client --client-id "$id" &
+done
+wait
+```
+
+- The server waits for every manifest client to register. All processes need an identical `partition.json`; each client only reads its own `train/<client_id>.npz`, and the server does not read feature arrays.
+- Each round samples `ceil(client_fraction * num_clients)` distinct clients. Selected clients replace their local model with the current global `state_dict`, train with SGD and cross-entropy, and return their trained `state_dict`. Other clients wait for the next command.
+- The server aggregates only after receiving one valid update for that round from every selected client. It weights updates by each client's training sample count and retains the server's non-floating buffers. Missing, invalid, or late updates abort the run without aggregating that round. The `timeout` setting bounds server registration and each round's communication, including the wait for local training.
+- The server saves the final global `state_dict` to `output`. This baseline runs on CPU and does not evaluate the test split. TCP defaults to `127.0.0.1:8765`; configure `host` and `port` in the shared YAML. The protocol is not authenticated or encrypted: use a trusted network and only load partition archives you trust.
 
 ## Outputs
 

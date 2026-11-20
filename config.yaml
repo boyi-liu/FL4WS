@@ -1,0 +1,11 @@
+partition: outputs/wiar-subject
+output: outputs/wiar-global.pt
+host: 127.0.0.1
+port: 8765
+rounds: 5
+client_fraction: 0.5
+local_epochs: 1
+batch_size: 32
+lr: 0.01
+seed: 42
+timeout: 120.0

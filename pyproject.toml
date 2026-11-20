@@ -14,10 +14,11 @@ dependencies = ["numpy>=1.23", "scipy>=1.9", "PyYAML>=6.0"]
 models = ["torch>=2.0"]
 
 [project.scripts]
-fl4ws = "fl4ws.__main__:main"
+fl4ws = "main:main"
 
 [tool.setuptools]
-packages = ["dataset", "fl4ws", "models"]
+packages = ["client", "dataset", "models", "server", "utils"]
+py-modules = ["main"]
 
 [tool.setuptools.package-data]
 dataset = ["config.yaml"]
