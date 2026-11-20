@@ -1,6 +1,7 @@
 """Run synchronous FedAvg over persistent TCP client connections."""
 
 from contextlib import ExitStack
+import json
 from math import ceil, isfinite
 from pathlib import Path
 import random
@@ -10,8 +11,9 @@ from time import monotonic
 import torch
 
 from models import build_model
-from utils._partition import load_partition
+from utils._partition import iter_test_batches, load_partition
 from utils._protocol import StateCodec, receive_message, send_message, time_left
+from utils.evaluation import evaluate
 
 
 def aggregate(global_state, updates):
@@ -46,6 +48,7 @@ class FedAvgServer:
             torch.manual_seed(seed)
             self.model = build_model(self.partition.dataset, num_classes=self.partition.num_classes)
         self.codec = StateCodec(self.model.state_dict())
+        self.metrics_by_round = {}
 
     def _register_clients(self, listener, stack, deadline):
         connections = {}
@@ -92,16 +95,30 @@ class FedAvgServer:
         self.model.load_state_dict(aggregate(state, updates))
         print(f"Round {round_id}: aggregated {len(updates)} updates", flush=True)
 
-    def run(self, host, port, *, timeout=120.0, output=None):
+    def evaluate(self, *, batch_size=32):
+        """Evaluate the current global model on all held-out test shards."""
+        batches = iter_test_batches(self.partition, self.model.sample_shape, batch_size=batch_size)
+        return evaluate(self.model, batches, num_classes=self.partition.num_classes)
+
+    def run(self, host, port, *, timeout=120.0, output=None, eval_every=0, eval_batch_size=32):
         """Wait for the manifest roster and train, returning the final global model."""
         if not isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
+        if type(eval_every) is not int or eval_every < 0:
+            raise ValueError("eval_every must be a nonnegative integer")
+        if eval_every and not any(self.partition.test_sizes.values()):
+            raise ValueError("Round evaluation requires test samples in partition.json")
+        self.metrics_by_round.clear()
         with socket.create_server((host, port)) as listener, ExitStack() as stack:
             address = listener.getsockname()
             print(f"Listening on {address[0]}:{address[1]}", flush=True)
             connections = self._register_clients(listener, stack, monotonic() + timeout)
             for round_id in range(1, self.rounds + 1):
                 self._run_round(round_id, connections, timeout)
+                if eval_every and round_id % eval_every == 0:
+                    metrics = self.evaluate(batch_size=eval_batch_size)
+                    self.metrics_by_round[round_id] = metrics
+                    print(f"Round {round_id}: evaluation {json.dumps(metrics)}", flush=True)
             if output is not None:
                 output = Path(output).expanduser()
                 output.parent.mkdir(parents=True, exist_ok=True)

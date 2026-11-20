@@ -19,6 +19,7 @@ class TrainingConfig:
     lr: float = 0.01
     seed: int = 42
     timeout: float = 120.0
+    eval_every: int = 0
 
     def __post_init__(self):
         if not isinstance(self.host, str) or not self.host.strip():
@@ -27,6 +28,8 @@ class TrainingConfig:
             raise ValueError("port must be an integer in [1, 65535]")
         if type(self.seed) is not int or not 0 <= self.seed < 2**63:
             raise ValueError("seed must be a nonnegative 63-bit integer")
+        if type(self.eval_every) is not int or self.eval_every < 0:
+            raise ValueError("eval_every must be a nonnegative integer")
         for field in ("rounds", "local_epochs", "batch_size"):
             value = getattr(self, field)
             if type(value) is not int or value < 1:

@@ -121,7 +121,21 @@ wait
 - The server waits for every manifest client to register. All processes need an identical `partition.json`; each client only reads its own `train/<client_id>.npz`, and the server does not read feature arrays.
 - Each round samples `ceil(client_fraction * num_clients)` distinct clients. Selected clients replace their local model with the current global `state_dict`, train with SGD and cross-entropy, and return their trained `state_dict`. Other clients wait for the next command.
 - The server aggregates only after receiving one valid update for that round from every selected client. It weights updates by each client's training sample count and retains the server's non-floating buffers. Missing, invalid, or late updates abort the run without aggregating that round. The `timeout` setting bounds server registration and each round's communication, including the wait for local training.
-- The server saves the final global `state_dict` to `output`. This baseline runs on CPU and does not evaluate the test split. TCP defaults to `127.0.0.1:8765`; configure `host` and `port` in the shared YAML. The protocol is not authenticated or encrypted: use a trusted network and only load partition archives you trust.
+- The server saves the final global `state_dict` to `output`. This baseline runs on CPU. TCP defaults to `127.0.0.1:8765`; configure `host` and `port` in the shared YAML. The protocol is not authenticated or encrypted: use a trusted network and only load partition archives you trust.
+
+### Round evaluation
+
+The example `config.yaml` sets `eval_every: 1` to evaluate the global model after every successful aggregation. Set it to `0` to disable evaluation (also the default if omitted), or to `N` to evaluate every `N` rounds. Centralized evaluation requires the server to have access to the exported `test/` shards. The server reads them one client at a time using `batch_size` and pools all held-out samples, including those from clients not selected for training that round.
+
+The server logs one JSON metrics object per evaluated round. When using `FedAvgServer` directly, results are also available in `server.metrics_by_round`. To evaluate independently with a PyTorch data loader:
+
+```python
+from utils.evaluation import evaluate
+
+metrics = evaluate(model, test_loader, num_classes=len(dataset.classes))
+```
+
+Metrics include sample-averaged cross-entropy loss, accuracy, macro precision, macro recall, macro F1, sample count, and the confusion matrix (rows are true labels, columns are predictions). Macro metrics average over the full class list, with undefined class scores counted as zero. Use `ClassificationEvaluator.update(logits, targets)` and `.compute()` if predictions are already available in batches.
 
 ## Outputs
 

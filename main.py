@@ -25,7 +25,10 @@ def _run_training(parser, args):
             server = FedAvgServer(
                 config.partition, rounds=config.rounds, client_fraction=config.client_fraction, seed=config.seed,
             )
-            server.run(config.host, config.port, timeout=config.timeout, output=config.output)
+            server.run(
+                config.host, config.port, timeout=config.timeout, output=config.output,
+                eval_every=config.eval_every, eval_batch_size=config.batch_size,
+            )
         else:
             from client.fedavg import FedAvgClient
 
